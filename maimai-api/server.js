@@ -4,6 +4,7 @@ const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 5050;
 const CLOUDFRONT_MAIMAI_URL = 'https://dp4p6x0xfi5o9.cloudfront.net/maimai/data.json';
+const JACKET_BASE_URL = 'https://dp4p6x0xfi5o9.cloudfront.net/maimai/jacket';
 const CACHE_TTL_MS = 15 * 60 * 1000;
 
 app.use(cors());
@@ -16,18 +17,18 @@ let catalogState = {
 };
 
 function normalizeDifficulty(rawDiff) {
-  const cleaned = String(rawDiff ?? '')
+  const compact = String(rawDiff ?? '')
     .trim()
     .toLowerCase()
-    .replace(/[\s_-]+/g, ':');
+    .replace(/[\s:_-]+/g, '');
 
-  if (cleaned === 're:master' || cleaned === 'remaster') {
+  if (compact === 'remaster' || compact.includes('remaster')) {
     return 'Re:MASTER';
   }
-  if (cleaned === 'master') return 'MASTER';
-  if (cleaned === 'expert') return 'EXPERT';
-  if (cleaned === 'advanced') return 'ADVANCED';
-  if (cleaned === 'basic') return 'BASIC';
+  if (compact === 'master') return 'MASTER';
+  if (compact === 'expert') return 'EXPERT';
+  if (compact === 'advanced') return 'ADVANCED';
+  if (compact === 'basic') return 'BASIC';
 
   return String(rawDiff ?? 'MASTER').trim();
 }
@@ -42,6 +43,17 @@ function normalizeSheet(sheet) {
         ? String(sheet.internalLevel)
         : null,
   };
+}
+
+function buildJacketUrl(rawImageName) {
+  if (!rawImageName || typeof rawImageName !== 'string') return null;
+  const trimmed = rawImageName.trim().replace(/^\/+/, '');
+  if (!trimmed) return null;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  const fileName = /\.(png|jpe?g|webp)$/i.test(trimmed)
+    ? trimmed
+    : `${trimmed}.png`;
+  return `${JACKET_BASE_URL}/${fileName}`;
 }
 
 function normalizeSong(raw, index) {
@@ -64,6 +76,9 @@ function normalizeSong(raw, index) {
     rawSheets.find((s) => s?.version)?.version ||
     'maimai DX';
 
+  const rawImageName = raw?.imageName || raw?.image || raw?.cover || null;
+  const imageName = rawImageName ? String(rawImageName).trim() : null;
+
   return {
     id: String(raw?.id ?? raw?.songId ?? `${index}-${title}`),
     title: String(title),
@@ -71,6 +86,8 @@ function normalizeSong(raw, index) {
     category: String(raw?.category || 'maimai'),
     version: String(firstVersion),
     bpm: raw?.bpm ?? null,
+    imageName,
+    imageUrl: buildJacketUrl(imageName),
     sheets,
   };
 }
