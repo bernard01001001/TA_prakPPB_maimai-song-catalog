@@ -141,6 +141,16 @@ async function refreshCatalog(force = false) {
   }
 }
 
+app.get('/', (_req, res) => {
+  const songsList = Array.isArray(catalogState?.songs) ? catalogState.songs : [];
+  return res.json({
+    status: 'ok',
+    service: 'maimai-custom-web-service',
+    totalSongs: songsList.length,
+    endpoints: ['/api/health', '/api/songs', '/api/songs/:id', '/api/refresh'],
+  });
+});
+
 app.post('/api/refresh', async (_req, res) => {
   const state = await refreshCatalog(true);
   return res.json({
@@ -274,7 +284,11 @@ app.use((err, _req, res, _next) => {
   return res.status(500).json({ message: 'Internal server error' });
 });
 
-app.listen(PORT, '0.0.0.0', async () => {
-  console.log(`Custom maimai API running on http://0.0.0.0:${PORT}`);
-  await refreshCatalog(true);
-});
+if (require.main === module) {
+  app.listen(PORT, '0.0.0.0', async () => {
+    console.log(`Custom maimai API running on http://0.0.0.0:${PORT}`);
+    await refreshCatalog(true);
+  });
+}
+
+module.exports = app;
