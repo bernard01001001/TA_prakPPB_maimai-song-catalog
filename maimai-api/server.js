@@ -6,6 +6,7 @@ const PORT = process.env.PORT || 5050;
 const CLOUDFRONT_MAIMAI_URL = 'https://dp4p6x0xfi5o9.cloudfront.net/maimai/data.json';
 const JACKET_BASE_URL = 'https://dp4p6x0xfi5o9.cloudfront.net/maimai/jacket';
 const CACHE_TTL_MS = 15 * 60 * 1000;
+const FETCH_TIMEOUT_MS = 20000;
 
 app.use(cors());
 app.use(express.json());
@@ -14,6 +15,7 @@ let catalogState = {
   songs: [],
   source: 'uninitialized',
   lastUpdated: null,
+  lastError: null,
 };
 
 function normalizeDifficulty(rawDiff) {
@@ -105,7 +107,7 @@ async function refreshCatalog(force = false) {
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 12000);
+    const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
     const response = await fetch(CLOUDFRONT_MAIMAI_URL, {
       signal: controller.signal,
@@ -131,42 +133,53 @@ async function refreshCatalog(force = false) {
       songs: rawList.map(normalizeSong),
       source: 'cloudfront (dp4p6x0xfi5o9.cloudfront.net/maimai/data.json)',
       lastUpdated: now,
+      lastError: null,
     };
 
     console.log(`Loaded ${catalogState.songs.length} maimai songs from CloudFront`);
     return catalogState;
   } catch (err) {
     console.error('Failed to fetch CloudFront maimai data:', err.message);
+    catalogState = {
+      ...catalogState,
+      lastError: err.message,
+    };
     return catalogState;
   }
 }
 
-app.get('/', (_req, res) => {
-  const songsList = Array.isArray(catalogState?.songs) ? catalogState.songs : [];
-  return res.json({
-    status: 'ok',
-    service: 'maimai-custom-web-service',
-    totalSongs: songsList.length,
-    endpoints: ['/api/health', '/api/songs', '/api/songs/:id', '/api/refresh'],
-  });
-});
-
-app.post('/api/refresh', async (_req, res) => {
-  const state = await refreshCatalog(true);
-  return res.json({
-    status: 'refreshed',
-    source: state.source,
-    totalSongs: state.songs.length,
-  });
-});
-
-app.get('/api/health', (_req, res) => {
+app.get('/', async (_req, res) => {
+  await refreshCatalog(false);
   const songsList = Array.isArray(catalogState?.songs) ? catalogState.songs : [];
   return res.json({
     status: 'ok',
     service: 'maimai-custom-web-service',
     source: catalogState?.source || 'unknown',
     totalSongs: songsList.length,
+    ...(catalogState?.lastError ? { lastError: catalogState.lastError } : {}),
+    endpoints: ['/api/health', '/api/songs', '/api/songs/:id', '/api/refresh'],
+  });
+});
+
+app.all('/api/refresh', async (_req, res) => {
+  const state = await refreshCatalog(true);
+  return res.json({
+    status: 'refreshed',
+    source: state.source,
+    totalSongs: state.songs.length,
+    ...(state?.lastError ? { lastError: state.lastError } : {}),
+  });
+});
+
+app.get('/api/health', async (_req, res) => {
+  await refreshCatalog(false);
+  const songsList = Array.isArray(catalogState?.songs) ? catalogState.songs : [];
+  return res.json({
+    status: 'ok',
+    service: 'maimai-custom-web-service',
+    source: catalogState?.source || 'unknown',
+    totalSongs: songsList.length,
+    ...(catalogState?.lastError ? { lastError: catalogState.lastError } : {}),
   });
 });
 
