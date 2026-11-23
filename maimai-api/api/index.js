@@ -2,7 +2,6 @@ const express = require('express');
 const cors = require('cors');
 
 const app = express();
-const PORT = process.env.PORT || 5050;
 const CLOUDFRONT_MAIMAI_URL = 'https://dp4p6x0xfi5o9.cloudfront.net/maimai/data.json';
 const JACKET_BASE_URL = 'https://dp4p6x0xfi5o9.cloudfront.net/maimai/jacket';
 const CACHE_TTL_MS = 15 * 60 * 1000;
@@ -136,7 +135,6 @@ async function refreshCatalog(force = false) {
       lastError: null,
     };
 
-    console.log(`Loaded ${catalogState.songs.length} maimai songs from CloudFront`);
     return catalogState;
   } catch (err) {
     console.error('Failed to fetch CloudFront maimai data:', err.message);
@@ -157,6 +155,17 @@ app.get('/', async (_req, res) => {
     source: catalogState?.source || 'unknown',
     totalSongs: songsList.length,
     ...(catalogState?.lastError ? { lastError: catalogState.lastError } : {}),
+    endpoints: ['/api/health', '/api/songs', '/api/songs/:id', '/api/refresh'],
+  });
+});
+
+app.get('/api', async (_req, res) => {
+  await refreshCatalog(false);
+  const songsList = Array.isArray(catalogState?.songs) ? catalogState.songs : [];
+  return res.json({
+    status: 'ok',
+    service: 'maimai-custom-web-service',
+    totalSongs: songsList.length,
     endpoints: ['/api/health', '/api/songs', '/api/songs/:id', '/api/refresh'],
   });
 });
@@ -259,49 +268,5 @@ app.get('/api/songs/:id', async (req, res) => {
     return res.status(500).json({ message: 'Failed to load song detail' });
   }
 });
-
-app.get('/api/versions', async (_req, res) => {
-  try {
-    await refreshCatalog(false);
-    const songsList = Array.isArray(catalogState?.songs) ? catalogState.songs : [];
-    const versionMap = new Map();
-
-    for (const song of songsList) {
-      const versionName = song.version || 'maimai DX';
-      const sheets = Array.isArray(song.sheets) ? song.sheets : [];
-      const current = versionMap.get(versionName) || {
-        id: encodeURIComponent(versionName),
-        version: versionName,
-        category: song.category || 'maimai',
-        songCount: 0,
-        chartCount: 0,
-      };
-
-      current.songCount += 1;
-      current.chartCount += sheets.length;
-      versionMap.set(versionName, current);
-    }
-
-    return res.json({
-      source: catalogState?.source || 'cloudfront',
-      versions: Array.from(versionMap.values()),
-    });
-  } catch (err) {
-    console.error('Error in GET /api/versions:', err);
-    return res.status(500).json({ message: 'Failed to load versions' });
-  }
-});
-
-app.use((err, _req, res, _next) => {
-  console.error('Unhandled server error:', err);
-  return res.status(500).json({ message: 'Internal server error' });
-});
-
-if (require.main === module) {
-  app.listen(PORT, '0.0.0.0', async () => {
-    console.log(`Custom maimai API running on http://0.0.0.0:${PORT}`);
-    await refreshCatalog(true);
-  });
-}
 
 module.exports = app;

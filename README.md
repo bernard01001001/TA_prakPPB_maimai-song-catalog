@@ -35,7 +35,8 @@ A mobile catalog and random song roulette application for **maimai DX**, built w
 ```text
 .
 ├── maimai-api/                  # Custom Express.js API server
-│   ├── server.js
+│   ├── api/
+│   │   └── index.js
 │   └── package.json
 └── mai-catalog/         # React Native (Expo) mobile application
     ├── app.json
