@@ -23,9 +23,9 @@ A mobile catalog and random song roulette application for **maimai DX**, built w
   - Displays the live eligible pool count and lets you tap the picked song to open its chart details.
 - **Song Catalog List with Pagination & Sorting**:
   - Search songs by title, artist, category, or version.
-  - Filter by **Category**, **Version**, **Difficulty** (including `Re:MASTER`), and **Level** via dropdown modals.
+  - Filter by **Category**, **Version**, **Difficulty**, and **Level** via dropdown modals.
   - Sort results by **Default**, **Level (Ascending / Descending)**, or **BPM (Ascending / Descending)**.
-  - Paginated list (`Sebelumnya` / `Berikutnya`) with navigation to **Song Detail**.
+  - Paginated list with navigation to **Song Detail**.
 - **Song Detail & Profile / About Screens**: Inspect full chart levels/metadata per song and view app/developer information.
 
 ---
