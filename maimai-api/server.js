@@ -9,14 +9,33 @@ const CACHE_TTL_MS = 15 * 60 * 1000;
 app.use(cors());
 app.use(express.json());
 
-function normalizeSheet(sheet) {
-  const rawDifficulty = String(sheet?.difficulty || 'MASTER');
-  const normalizedDifficulty =
-    rawDifficulty.toUpperCase() === 'REMASTER' ? 'Re:MASTER' : rawDifficulty;
+let catalogState = {
+  songs: [],
+  source: 'uninitialized',
+  lastUpdated: null,
+};
 
+function normalizeDifficulty(rawDiff) {
+  const cleaned = String(rawDiff ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, ':');
+
+  if (cleaned === 're:master' || cleaned === 'remaster') {
+    return 'Re:MASTER';
+  }
+  if (cleaned === 'master') return 'MASTER';
+  if (cleaned === 'expert') return 'EXPERT';
+  if (cleaned === 'advanced') return 'ADVANCED';
+  if (cleaned === 'basic') return 'BASIC';
+
+  return String(rawDiff ?? 'MASTER').trim();
+}
+
+function normalizeSheet(sheet) {
   return {
     type: String(sheet?.type || 'DX'),
-    difficulty: normalizedDifficulty,
+    difficulty: normalizeDifficulty(sheet?.difficulty),
     level: String(sheet?.level ?? '?'),
     internalLevel:
       sheet?.internalLevel !== undefined && sheet?.internalLevel !== null
@@ -91,22 +110,16 @@ async function refreshCatalog(force = false) {
       throw new Error('CloudFront returned an empty song list');
     }
 
-    const normalizedSongs = rawList.map(normalizeSong);
     catalogState = {
-      songs: normalizedSongs,
+      songs: rawList.map(normalizeSong),
       source: 'cloudfront (dp4p6x0xfi5o9.cloudfront.net/maimai/data.json)',
       lastUpdated: now,
     };
 
-    console.log(
-      `Loaded ${catalogState.songs.length} maimai songs from CloudFront`
-    );
+    console.log(`Loaded ${catalogState.songs.length} maimai songs from CloudFront`);
     return catalogState;
   } catch (err) {
-    console.error(
-      'Failed to fetch CloudFront maimai data, using current/fallback catalog:',
-      err.message
-    );
+    console.error('Failed to fetch CloudFront maimai data:', err.message);
     return catalogState;
   }
 }
@@ -136,12 +149,10 @@ app.get('/api/songs', async (req, res) => {
 
     const { q = '', difficulty = 'ALL', version = '' } = req.query;
     const queryLower = String(q).trim().toLowerCase();
-    const diffUpper = String(difficulty).trim().toUpperCase();
+    const diffNormalized = normalizeDifficulty(difficulty).toUpperCase();
     const versionLower = String(version).trim().toLowerCase();
 
-    const songsList = Array.isArray(catalogState?.songs)
-      ? catalogState.songs
-      : [];
+    const songsList = Array.isArray(catalogState?.songs) ? catalogState.songs : [];
 
     const filtered = songsList.filter((song) => {
       if (!song || typeof song !== 'object') return false;
@@ -160,12 +171,12 @@ app.get('/api/songs', async (req, res) => {
         songVersion.includes(queryLower);
 
       const matchDiff =
-        !diffUpper ||
-        diffUpper === 'ALL' ||
+        !difficulty ||
+        String(difficulty).trim().toUpperCase() === 'ALL' ||
         sheets.some(
           (sheet) =>
             sheet &&
-            String(sheet.difficulty ?? '').toUpperCase() === diffUpper
+            normalizeDifficulty(sheet.difficulty).toUpperCase() === diffNormalized
         );
 
       const matchVersion = !versionLower || songVersion === versionLower;
@@ -190,9 +201,7 @@ app.get('/api/songs', async (req, res) => {
 app.get('/api/songs/:id', async (req, res) => {
   try {
     await refreshCatalog(false);
-    const songsList = Array.isArray(catalogState?.songs)
-      ? catalogState.songs
-      : [];
+    const songsList = Array.isArray(catalogState?.songs) ? catalogState.songs : [];
     const song = songsList.find(
       (item) => String(item.id) === String(req.params.id)
     );
@@ -214,9 +223,7 @@ app.get('/api/songs/:id', async (req, res) => {
 app.get('/api/versions', async (_req, res) => {
   try {
     await refreshCatalog(false);
-    const songsList = Array.isArray(catalogState?.songs)
-      ? catalogState.songs
-      : [];
+    const songsList = Array.isArray(catalogState?.songs) ? catalogState.songs : [];
     const versionMap = new Map();
 
     for (const song of songsList) {
